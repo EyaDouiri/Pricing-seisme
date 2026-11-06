@@ -1,0 +1,59 @@
+# Modélisation et pricing d'une couverture paramétrique séisme
+
+Prototype actuariel en Python qui simule l'aléa sismique, calcule un indice PGA et évalue une couverture paramétrique. L'étude comprend la tarification, une courbe de dépassement, l'incertitude sur les paramètres, le basis risk, le choix du trigger et une analyse de sensibilité.
+
+> **Périmètre.** Le catalogue et la GMPE sont stylisés. Les résultats illustrent une méthode et ne constituent ni un tarif commercial ni une estimation calibrée pour une région réelle.
+
+## Exécution
+
+Python 3.10 ou supérieur.
+
+```bash
+python -m venv .venv
+# Windows PowerShell : .venv\Scripts\Activate.ps1
+# macOS/Linux : source .venv/bin/activate
+python -m pip install -r requirements.txt
+python run_analysis.py
+```
+
+Le script écrit les tableaux CSV, `summary.json` et les cinq figures dans `outputs/`. La graine est fixée pour rendre l'analyse reproductible.
+
+## Méthode
+
+| Étape | Hypothèse / méthode |
+|---|---|
+| Fréquence | Poisson, 3 événements M ≥ 5 par an dans un disque de rayon 150 km |
+| Magnitude | Gutenberg–Richter tronquée [5, 8], b = 1 |
+| Indice | PGA par GMPE simplifiée : ln(PGA) = −1,9 + (M−6) − 1,2 ln(R/10) + ε, σ = 0,6 |
+| Couverture | Limite annuelle de 10 M$ ; payout de 25 %, 50 % ou 100 % aux seuils 0,08, 0,15 et 0,25 g |
+| Prime | AAL + 0,35 × écart-type ; comparaison avec une charge de coût du capital de 10 % × (TVaR99 − AAL) |
+| Incertitude | 200 catalogues pseudo-observés de 60 ans ; ré-estimation de λ et b, puis repricing |
+| Basis risk | Index distinct du PGA au portefeuille ; fonction de vulnérabilité sigmoïde avec bruit multiplicatif |
+| Trigger | Couverture binaire ; comparaison du coût et des erreurs de déclenchement sur une grille de seuils |
+
+## Résultats reproductibles
+
+Sur 200 000 années simulées avec la graine du projet :
+
+- Probabilité annuelle de déclenchement : **2,52 %**.
+- AAL : **88,5 k$** ; prime par principe de l'écart-type : **312,1 k$** ; rate on line : **3,12 %**.
+- VaR 99 % : **2,5 M$** ; TVaR 99 % : **5,05 M$** (moyenne des 1 % d'années les plus coûteuses ; la distribution est discrète).
+- Sur 200 catalogues de 60 ans : prime P5–P95 de **258,5 à 378,9 k$**, coefficient de variation de **11,6 %**.
+- Basis risk : corrélation perte/payout **0,683** ; payout sans perte matérielle dans **1,40 %** des années ; perte matérielle sans payout dans **0,24 %** des années.
+- La sensibilité la plus forte vient du coefficient d'atténuation c2 (−22,7 % à +39,2 % sur la prime dans les scénarios étudiés), puis de σ de la GMPE (−16,2 % à +19,2 %).
+- Sur la grille testée, le taux de perte matérielle sans payout dépasse le taux de payout sans perte matérielle entre 0,12 g et 0,16 g ; le point d'égalité n'est pas estimé plus finement.
+
+Les valeurs sont conditionnelles aux hypothèses stylisées et ne doivent pas être interprétées comme des estimations empiriques.
+
+## Structure
+
+- `parametric_eq.py` : simulation, payout, métriques de risque, incertitude, basis risk, triggers et sensibilités.
+- `run_analysis.py` : exécution de l'étude et génération des tables et figures.
+- `requirements.txt` : dépendances Python.
+- `outputs/` : résultats générés.
+
+## Formulation CV
+
+**Pricing d'une couverture paramétrique séisme (Python)** — Développement d'une simulation Monte Carlo de l'aléa (Poisson, Gutenberg–Richter, GMPE stylisée) et d'un moteur de pricing indexé sur le PGA ; analyse de l'AAL, VaR/TVaR, incertitude paramétrique, basis risk, seuils de trigger et sensibilités.
+
+Préciser « modèle stylisé, non calibré sur données réelles » si le projet est discuté en entretien.
