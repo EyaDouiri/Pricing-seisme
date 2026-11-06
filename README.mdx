@@ -1,86 +1,80 @@
-# Séisme paramétrique · de l'aléa au prix
+# Pricing d'une couverture paramétrique séisme
 
-> **En bref** — Ce projet Python construit un petit modèle actuariel : il simule des séismes, transforme leur intensité en indemnités selon un contrat paramétrique, puis étudie le prix et les erreurs possibles.
+Étude de modélisation actuarielle en Python d'une couverture indexée sur le PGA (*Peak Ground Acceleration*). Le projet relie la simulation d'événements sismiques à la structure de paiement du contrat, puis analyse le prix, le risque extrême, le basis risk et la sensibilité aux hypothèses.
 
-## Le parcours du modèle
+**Rapport :** [PDF](outputs/rapport_catastrophe_naturelle.pdf) · [source LaTeX](outputs/rapport_catastrophe_naturelle.tex)
 
-```text
-Séismes simulés
-   ↓ fréquence, magnitude, distance
-PGA simulé à une station de référence
-   ↓ seuils du contrat
-Indemnité paramétrique
-   ↓ agrégation année par année
-Prix · risque extrême · basis risk · sensibilités
-```
-
-**PGA** signifie accélération maximale du sol. Le contrat ne rembourse pas la perte réelle : il verse un montant prédéfini quand l'indice PGA franchit un seuil.
-
-## Ce que montrent les figures
-
-### 1. Le contrat et l'indice
-
-![Paliers d'indemnisation et distribution PGA simulée](outputs/fig1_payout_pga.png)
-
-Le contrat verse 25 % de la limite à 0,08 g, 50 % à 0,15 g et 100 % à 0,25 g. La limite annuelle est de 10 M$.
-
-### 2. Les pertes annuelles possibles
-
-![Courbe de dépassement des indemnités annuelles](outputs/fig2_ep_curve.png)
-
-La courbe EP classe les indemnités annuelles simulées selon leur période de retour. Par exemple, un niveau de retour de 100 ans correspond au quantile annuel de 99 % dans cette simulation.
-
-### 3. L'incertitude sur le prix
-
-![Distribution de prime avec paramètres réestimés](outputs/fig3_param_uncertainty.png)
-
-Chaque simulation réestime fréquence et b-value à partir d'un catalogue fictif de 60 ans, puis recalcule la prime.
-
-### 4. Le compromis autour du trigger
-
-![Coût et erreurs selon le seuil de déclenchement](outputs/fig4_trigger_frontier.png)
-
-Un seuil bas déclenche plus souvent et coûte plus cher. Un seuil haut réduit les paiements, mais augmente le risque qu'une perte survienne sans indemnité.
-
-### 5. Les hypothèses qui pèsent sur le prix
-
-![Sensibilité de la prime aux hypothèses du modèle](outputs/fig5_sensitivity.png)
-
-Dans les scénarios testés, le coefficient d'atténuation de la GMPE influence le plus le prix.
-
-## Résultats clés
-
-Sur 200 000 années simulées, avec la graine fixée dans le code :
-
-| Indicateur | Résultat | Comment le lire |
-|---|---:|---|
-| Déclenchement annuel | **2,52 %** | Environ 2,5 années sur 100 ont un paiement |
-| AAL | **88,5 k$** | Indemnité annuelle moyenne simulée |
-| Prime, principe de l'écart-type | **312,1 k$** | AAL + 35 % de l'écart-type des paiements annuels |
-| Rate on line | **3,12 %** | Prime divisée par la limite de 10 M$ |
-| VaR 99 % | **2,5 M$** | Quantile 99 % des paiements annuels |
-| TVaR 99 % | **5,05 M$** | Moyenne des 1 % d'années les plus coûteuses |
-| Corrélation perte / indemnité | **0,683** | L'indice suit partiellement la perte simulée; la correspondance est imparfaite |
-
-La prime varie de **258,5 à 378,9 k$** entre les percentiles 5 et 95 des 200 réestimations. La sensibilité de la prime à l'atténuation c2 va de **−22,7 % à +39,2 %** pour les scénarios testés.
-
-## Alors, l'output, c'est quoi ?
-
-Le dossier `outputs/` contient les **résultats produits automatiquement par le programme**. Ce n'est pas, à lui seul, un rapport rédigé : les CSV et le JSON sont des données de résultats, et les PNG sont les graphiques. Le document [rapport_resultats.md](outputs/rapport_resultats.md) est le résumé interprété en langage courant.
+## Chaîne de modélisation
 
 ```text
-run_analysis.py
-     ↓ exécute les simulations et calcule les indicateurs
-outputs/
-     ├── rapport_resultats.md    ← interprétation lisible
-     ├── summary.json             ← indicateurs numériques
-     ├── ep_curve.csv             ← points de la courbe EP
-     ├── trigger_frontier.csv     ← comparaison des seuils
-     ├── sensitivity.csv          ← résultats des scénarios
-     └── fig1…fig5.png             ← graphiques
+Fréquence, magnitude et distance des séismes
+                      ↓
+             PGA à l'index de référence
+                      ↓
+       Paliers de paiement du contrat
+                      ↓
+  Agrégation annuelle et limite contractuelle
+                      ↓
+ Tarification · risque · basis risk · sensibilités
 ```
 
-## Lancer le projet
+Le PGA est l'accélération maximale du sol. L'indemnité dépend uniquement de cet indice et des seuils contractuels; elle ne dépend pas de la perte effectivement observée.
+
+## Structure de la couverture
+
+Limite annuelle de **10 M$**, agrégée et plafonnée par année.
+
+| PGA à l'index | Part de la limite payée |
+|---:|---:|
+| 0,08 g | 25 % |
+| 0,15 g | 50 % |
+| 0,25 g | 100 % |
+
+![Fonction de paiement et distribution PGA simulée](outputs/fig1_payout_pga.png)
+
+## Méthode
+
+| Composante | Modélisation |
+|---|---|
+| Fréquence | Processus de Poisson, taux de 3 événements M ≥ 5 par an dans un rayon de 150 km |
+| Magnitude | Loi de Gutenberg–Richter tronquée entre 5 et 8, b = 1 |
+| PGA | GMPE simplifiée : ln(PGA) = −1,9 + (M−6) − 1,2 ln(R/10) + ε, avec σ = 0,6 |
+| Tarification | AAL + 0,35 × écart-type; comparaison avec une charge de coût du capital de 10 % × (TVaR99 − AAL) |
+| Incertitude paramétrique | 200 catalogues pseudo-observés de 60 ans; réestimation du taux et de la b-value, puis repricing |
+| Basis risk | PGA au portefeuille distinct de l'index; fonction de vulnérabilité sigmoïde avec erreur spatiale et bruit multiplicatif |
+| Design du trigger | Couverture binaire; balayage du seuil et comparaison des coûts, faux paiements et pertes non indemnisées |
+
+## Résultats
+
+Résultats sur **200 000 années simulées**, avec la graine fixée dans le code :
+
+| Mesure | Estimation |
+|---|---:|
+| Probabilité annuelle de paiement | 2,52 % |
+| AAL (perte annuelle moyenne) | 88,5 k$ |
+| Prime, principe de l'écart-type | 312,1 k$ |
+| Rate on line | 3,12 % |
+| VaR 99 % / TVaR 99 % | 2,50 M$ / 5,05 M$ |
+| Prime P5–P95 après réestimation paramétrique | 258,5–378,9 k$ |
+| Corrélation perte simulée / indemnité | 0,683 |
+
+La TVaR99 est calculée comme la moyenne des 1 % d'années les plus coûteuses. Le résultat de basis risk dépend de la définition stylisée de la perte matérielle (5 % de la limite) et de la fonction de vulnérabilité retenue.
+
+![Courbe EP des paiements annuels](outputs/fig2_ep_curve.png)
+
+![Distribution des primes après réestimation paramétrique](outputs/fig3_param_uncertainty.png)
+
+## Basis risk et choix du trigger
+
+La couverture paramétrique peut verser une indemnité sans perte matérielle correspondante ou ne pas payer lorsqu'une perte matérielle survient. Le balayage du trigger binaire illustre le compromis entre coût de la couverture et risque de perte sans indemnisation. Les sensibilités sont évaluées en modifiant une hypothèse à la fois.
+
+![Coût et erreurs selon le trigger](outputs/fig4_trigger_frontier.png)
+
+![Sensibilité de la prime aux hypothèses](outputs/fig5_sensitivity.png)
+
+Le coefficient d'atténuation c2 de la GMPE produit la plus forte variation dans les scénarios étudiés (−22,7 % à +39,2 % sur la prime), suivi de l'écart-type σ (−16,2 % à +19,2 %).
+
+## Reproductibilité
 
 Python 3.10 ou supérieur :
 
@@ -92,22 +86,22 @@ python -m pip install -r requirements.txt
 python run_analysis.py
 ```
 
-Le script régénère les fichiers de résultats dans `outputs/`. La graine aléatoire est fixée pour reproduire les chiffres.
+La commande régénère les tables et figures dans `outputs/`.
 
-## Hypothèses et limites
+Le rapport PDF peut être régénéré à partir des sorties avec :
 
-- Le catalogue sismique est simulé et la relation PGA-magnitude-distance est une GMPE simplifiée. Les paramètres sont illustratifs, **non calibrés sur une région ni sur des données réelles**.
-- La fonction de perte et le seuil de perte dite « matérielle » (5 % de la limite) sont des hypothèses de démonstration.
-- Le modèle ne couvre pas la dépendance spatiale d'un portefeuille multi-sites ni les répliques temporelles.
-- Ces résultats illustrent une méthode ; ils ne constituent ni une cotation commerciale ni une prévision empirique.
+```bash
+python build_report.py
+```
 
-## Fichiers du projet
+## Fichiers
 
-- `parametric_eq.py` : simulation, contrat, tarification et analyses de risque.
-- `run_analysis.py` : lance l'étude et écrit les sorties.
-- `requirements.txt` : bibliothèques nécessaires.
-- `outputs/` : figures, tables et rapport de résultats.
+- `parametric_eq.py` — fonctions de simulation, de tarification et d'analyse.
+- `run_analysis.py` — exécution reproductible de l'étude et génération des sorties.
+- `build_report.py` — mise en page du rapport PDF à partir des résultats calculés.
+- `requirements.txt` — dépendances Python.
+- `outputs/` — résultats numériques, figures, rapport PDF et source LaTeX.
 
-## Formulation CV
+## Limites
 
-**Pricing d'une couverture paramétrique séisme en Python** — Simulation Monte Carlo de l'aléa et d'un indice PGA ; analyse de tarification, VaR/TVaR, incertitude paramétrique, basis risk, choix du trigger et sensibilités. *(Modèle stylisé, non calibré sur données réelles.)*
+Le catalogue sismique, la GMPE et la vulnérabilité sont stylisés et ne sont calibrés sur aucune région ni donnée de sinistre réelle. Les estimations sont conditionnelles aux hypothèses choisies et illustrent une méthode; elles ne constituent pas une tarification de marché. Une application réelle nécessiterait un catalogue historique, une GMPE publiée et une calibration de la vulnérabilité au portefeuille.
